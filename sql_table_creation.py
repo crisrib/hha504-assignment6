@@ -1,43 +1,101 @@
-# Import package
-import sqlite3
+# Import packages
+import pandas as pd
+from dotenv import load_dotenv
+import os
+import sqlalchemy
+from sqlalchemy import create_engine
+import dbm
 
-# Connect to sqlite
-connect = sqlite3.connect('./Patients.db')
+# Load in credentials
+load_dotenv()
 
-# Create database object
-db = connect.cursor()
+# Login credentials
+GCP_MYSQL_HOSTNAME = os.getenv('GCP_MYSQL_HOSTNAME')
+GCP_MYSQL_USER = os.getenv('GCP_MYSQL_USER')
+GCP_MYSQL_PASSWORD = os.getenv('GCP_MYSQL_PASSWORD')
+GCP_MYSQL_DATABASE = os.getenv('GCP_MYSQL_DATABASE')
 
-# Delete patient_table if it already exists
-db.execute("DROP TABLE IF EXISTS patient_table")
-connect.commit()
+# Create connection string
+connection_string = f'mysql+pymysql://{GCP_MYSQL_USER}:{GCP_MYSQL_PASSWORD}@{GCP_MYSQL_HOSTNAME}:3306/{GCP_MYSQL_DATABASE}'
+gc_engine = create_engine(connection_string)
 
-# Create table
-table = """ CREATE TABLE patient_table (
-    mrn VARCHAR(25) NOT NULL,
-    firstname CHAR(25) NOT NULL,
-    lastname CHAR(25) NOT NULL,
-    dob CHAR(25) NOT NULL,
-    sex CHAR(25) NOT NULL,
-    contact VARCHAR(25) NOT NULL,
-    insurance CHAR(25) NOT NULL, 
-    provider CHAR(25) NOT NULL ); """
+# Show databases
+tablenames_gcp= gc_engine.table_names()
 
-table 
+# Create tables
+production_patients = """
+create table if not exists production_patients (
+    id int auto_increment,
+    mrn varchar(255) default null unique,
+    first_name varchar(255) default null,
+    last_name varchar(255) default null,
+    zip_code varchar(255) default null,
+    dob varchar(255) default null,
+    gender varchar(255) default null,
+    contact_mobile varchar(255) default null,
+    contact_home varchar(255) default null,
+    PRIMARY KEY (id) 
+); 
+"""
+medications = """
+create table if not exists medications (
+    id int auto_increment,
+    med_ndc varchar(255) default null unique,
+    med_human_name varchar(255) default null,
+    med_is_dangerous varchar(255) default null,
+    PRIMARY KEY (id)
+); 
+"""
+conditions = """
+create table if not exists conditions (
+    id int auto_increment,
+    icd10_code varchar(255) default null unique,
+    icd10_description varchar(255) default null,
+    PRIMARY KEY (id) 
+); 
+"""
+treatment_procedures = """
+create table if not exists treatment_procedures (
+    id int auto_increment,
+    cpt_code varchar(255) default null unique,
+    cpt_description varchar(255) default null,
+    PRIMARY KEY (id) 
+); 
+"""
+patient_medications = """
+create table if not exists patient_medication (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    med_ndc varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (med_ndc) REFERENCES medications(med_ndc) ON DELETE CASCADE
+); 
+"""
+patient_conditions = """
+create table if not exists patient_conditions (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    icd10_code varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (icd10_code) REFERENCES conditions(icd10_code) ON DELETE CASCADE
+); 
+"""
+patient_treatment_procedures = """
+create table if not exists patient_treatment_procedures (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    cpt_code varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (cpt_code) REFERENCES treatments_procedures(cpt_code) ON DELETE CASCADE
+); 
+"""
 
-db.execute(table)
-connect.commit()
-
-# Insert data into table
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('83746', 'Sam', 'Rocket', '01/18/1965', 'Female', '631-888-9999', 'BCBS', 'Dugger')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('28364', 'Timothy', 'Washington', '10/17/1999', 'Male', '631-111-2222', 'BCBS', 'Jenkins')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('33826', 'Daisy', 'Daniels', '06/23/1988', 'Female', '631-333-4444', 'Aetna', 'Dugger')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('76555', 'Chase', 'Merrick', '02/18/2001', 'Male', '631-555-6666', 'Cigna', 'Dugger')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('82763', 'David', 'Paone', '03/22/1999', 'Male', '631-999-0000', 'Magnacare', 'Polka')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('37626', 'Cole', 'Muller', '09/07/2003', 'Male', '631-444-1111', 'Cigna', 'Polka')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('58766', 'Maria', 'Okang', '01/11/1973', 'Female', '631-777-6666', 'Aetna', 'Jenkins')")
-db.execute("INSERT INTO patient_table(mrn, firstname, lastname, dob, sex, contact, insurance, provider) values('12544', 'Betty', 'Vadicherla', '05/01/2010', 'Female', '631-111-7777', 'BCBS', 'Dugger')")
-
-connect.commit()
-
-# Close connection
-connect.close()
+gc_engine.execute(production_patients)
+gc_engine.execute(medications)
+gc_engine.execute(patient_medications)
+gc_engine.execute(conditions)
+gc_engine.execute(patient_conditions)
+gc_engine.execute(treatment_procedures)
