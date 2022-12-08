@@ -1,30 +1,38 @@
-# Import packages
-import pandas as pd
-from dotenv import load_dotenv
-import os
+""" Import Packages """
 import sqlalchemy
 from sqlalchemy import create_engine
-import dbm
+import dotenv
+from dotenv import load_dotenv
+import os
+import pandas as pd
 
-# Load in credentials
-load_dotenv()
 
-# Login credentials
-GCP_MYSQL_HOSTNAME = os.getenv('GCP_MYSQL_HOSTNAME')
-GCP_MYSQL_USER = os.getenv('GCP_MYSQL_USER')
-GCP_MYSQL_PASSWORD = os.getenv('GCP_MYSQL_PASSWORD')
-GCP_MYSQL_DATABASE = os.getenv('GCP_MYSQL_DATABASE')
+load_dotenv() # Verify dotenv has loaded properly 
 
-# Create connection string
-connection_string = f'mysql+pymysql://{GCP_MYSQL_USER}:{GCP_MYSQL_PASSWORD}@{GCP_MYSQL_HOSTNAME}:3306/{GCP_MYSQL_DATABASE}'
-gc_engine = create_engine(connection_string)
+ """ Login into Virtual mysql"""
+ 
+ #Loading mysql login credentials
 
-# Show databases
-tablenames_gcp= gc_engine.table_names()
+MYSQL_HOSTNAME = os.getenv("HOSTNAME")
+MYSQL_USER = os.getenv("USERNAME")
+MYSQL_PASSWORD = os.getenv("PASSWORD")
+MYSQL_DATABASE = os.getenv("DATABASE") #database is db1
 
-# Create tables
-production_patients = """
-create table if not exists production_patients (
+#connect to mysql database
+connection_string = f'mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOSTNAME}/{MYSQL_DATABASE}'
+connection_string
+
+db = create_engine(connection_string)
+
+""" Drop Tables if exist """
+
+sql = "DROP TABLE IF EXISTS customers" 
+
+""" Creating tables """
+
+#Patient Table
+table_patients = """
+create table if not exists patients (
     id int auto_increment,
     mrn varchar(255) default null unique,
     first_name varchar(255) default null,
@@ -37,7 +45,8 @@ create table if not exists production_patients (
     PRIMARY KEY (id) 
 ); 
 """
-medications = """
+#Medication Table
+table_medications = """
 create table if not exists medications (
     id int auto_increment,
     med_ndc varchar(255) default null unique,
@@ -46,7 +55,9 @@ create table if not exists medications (
     PRIMARY KEY (id)
 ); 
 """
-conditions = """
+
+# Condition Table
+table_conditions = """
 create table if not exists conditions (
     id int auto_increment,
     icd10_code varchar(255) default null unique,
@@ -54,48 +65,85 @@ create table if not exists conditions (
     PRIMARY KEY (id) 
 ); 
 """
-treatment_procedures = """
-create table if not exists treatment_procedures (
+
+# Creating a Patient medication table
+table_patients_medications = """
+create table if not exists patient_medications (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    med_ndc varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (med_ndc) REFERENCES medications(med_ndc) ON DELETE CASCADE
+); 
+"""
+
+#Creating Patient condition table
+table_patient_conditions = """
+create table if not exists patient_conditions (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    icd10_code varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (icd10_code) REFERENCES conditions(icd10_code) ON DELETE CASCADE
+); 
+"""
+#Creating a Social Determinates table
+table_social_determinants = """
+create table if not exists social_determinants (
+    id int auto_increment,
+    loinc_code varchar(255) default null unique,
+    loinc_category varchar(255) default null,
+    loinc_description varchar(255) default null,
+    PRIMARY KEY (id) 
+); 
+"""
+#Creating a Patient Social Determinates table
+table_patients_social_determinants = """
+create table if not exists patient_social_determinants (
+    id int auto_increment,
+    mrn varchar(255) default null,
+    loinc_code varchar(255) default null,
+    loinc_description varchar(255) default null,
+    PRIMARY KEY (id),
+    FOREIGN KEY (mrn) REFERENCES patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (loinc_code) REFERENCES social_determinants(loinc_code) ON DELETE CASCADE
+); 
+"""
+
+#Creating a Treatments procedure Table
+table_treatments_procedures = """
+create table if not exists treatments_procedures (
     id int auto_increment,
     cpt_code varchar(255) default null unique,
     cpt_description varchar(255) default null,
     PRIMARY KEY (id) 
 ); 
 """
-patient_medications = """
-create table if not exists patient_medication (
-    id int auto_increment,
-    mrn varchar(255) default null,
-    med_ndc varchar(255) default null,
-    PRIMARY KEY (id),
-    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
-    FOREIGN KEY (med_ndc) REFERENCES medications(med_ndc) ON DELETE CASCADE
-); 
-"""
-patient_conditions = """
-create table if not exists patient_conditions (
-    id int auto_increment,
-    mrn varchar(255) default null,
-    icd10_code varchar(255) default null,
-    PRIMARY KEY (id),
-    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
-    FOREIGN KEY (icd10_code) REFERENCES conditions(icd10_code) ON DELETE CASCADE
-); 
-"""
-patient_treatment_procedures = """
-create table if not exists patient_treatment_procedures (
+
+#Creating patient treatments procedure Table 
+table_patients_treatments_procedures = """
+create table if not exists patient_treatments_procedures (
     id int auto_increment,
     mrn varchar(255) default null,
     cpt_code varchar(255) default null,
     PRIMARY KEY (id),
-    FOREIGN KEY (mrn) REFERENCES production_patients(mrn) ON DELETE CASCADE,
+    FOREIGN KEY (mrn) REFERENCES patients(mrn) ON DELETE CASCADE,
     FOREIGN KEY (cpt_code) REFERENCES treatments_procedures(cpt_code) ON DELETE CASCADE
 ); 
 """
+#execute queries
+db.execute(table_patients)
+db.execute(table_medications)
+db.execute(table_conditions)
+db.execute(table_social_determinants)
+db.execute(table_patients_medications)
+db.execute(table_patient_conditions)
+db.execute(table_patients_social_determinants)
+db.execute(table_treatments_procedures)
+db.execute(table_patients_treatments_procedures)
 
-gc_engine.execute(production_patients)
-gc_engine.execute(medications)
-gc_engine.execute(patient_medications)
-gc_engine.execute(conditions)
-gc_engine.execute(patient_conditions)
-gc_engine.execute(treatment_procedures)
+
+#confirm tables were created
+db.table_names()
